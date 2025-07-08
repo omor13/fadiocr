@@ -1,103 +1,80 @@
-"""
-This code sample shows Prebuilt Receipt operations with the Azure AI Document Intelligence client library.
-The async versions of the samples require Python 3.8 or later.
+# app.py
 
-To learn more, please visit the documentation - Quickstart: Document Intelligence (formerly Form Recognizer) SDKs
-https://learn.microsoft.com/azure/ai-services/document-intelligence/quickstarts/get-started-sdks-rest-api?pivots=programming-language-python
-"""
-
+import streamlit as st
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
 
-"""
-Remember to remove the key from your code when you're done, and never post it publicly. For production, use
-secure methods to store and access your credentials. For more information, see 
-https://docs.microsoft.com/en-us/azure/cognitive-services/cognitive-services-security?tabs=command-line%2Ccsharp#environment-variables-and-application-configuration
-"""
+st.title("Azure Document Intelligence - Receipt OCR")
 
-endpoint = "https://ai-cloud270120172691ai889652229317.cognitiveservices.azure.com/"
-key = "C5zuwUBoa8k6LiMnhx03F8YMjCNDMUDXTg5ljPXVvA5v403u5TlAJQQJ99BGACYeBjFXJ3w3AAAAACOGVBbw"
+# Add text input for endpoint & key (for dev only, or use env vars in prod)
+endpoint = st.text_input("Endpoint", "https://<YOUR-RESOURCE-NAME>.cognitiveservices.azure.com/")
+key = st.text_input("Key", "YOUR_KEY", type="password")
 
-# sample document
-url = "https://raw.githubusercontent.com/Azure/azure-sdk-for-python/main/sdk/formrecognizer/azure-ai-formrecognizer/tests/sample_forms/receipt/contoso-receipt.png"
-
-document_intelligence_client  = DocumentIntelligenceClient(
-    endpoint=endpoint, credential=AzureKeyCredential(key)
+# Add text input for document URL
+document_url = st.text_input(
+    "Document URL",
+    "https://raw.githubusercontent.com/Azure/azure-sdk-for-python/main/sdk/formrecognizer/azure-ai-formrecognizer/tests/sample_forms/receipt/contoso-receipt.png"
 )
 
-poller = document_intelligence_client.begin_analyze_document(
-    "prebuilt-receipt", AnalyzeDocumentRequest(url_source=url)
-)
-receipts = poller.result()
+if st.button("Analyze Receipt"):
+    if not endpoint or not key:
+        st.error("Please enter your Azure Document Intelligence endpoint and key.")
+    else:
+        document_intelligence_client = DocumentIntelligenceClient(
+            endpoint=endpoint, credential=AzureKeyCredential(key)
+        )
 
-for idx, receipt in enumerate(receipts.documents):
-    print("--------Recognizing receipt #{}--------".format(idx + 1))
-    receipt_type = receipt.doc_type
-    if receipt_type:
-        print(
-            "Receipt Type: {}".format(receipt_type)
-        )
-    merchant_name = receipt.fields.get("MerchantName")
-    if merchant_name:
-        print(
-            "Merchant Name: {} has confidence: {}".format(
-                merchant_name.value_string, merchant_name.confidence
+        with st.spinner("Analyzing document..."):
+            poller = document_intelligence_client.begin_analyze_document(
+                "prebuilt-receipt",
+                AnalyzeDocumentRequest(url_source=document_url)
             )
-        )
-    transaction_date = receipt.fields.get("TransactionDate")
-    if transaction_date:
-        print(
-            "Transaction Date: {} has confidence: {}".format(
-                transaction_date.value_date, transaction_date.confidence
-            )
-        )
-    if receipt.fields.get("Items"):
-        print("Receipt items:")
-        for idx, item in enumerate(receipt.fields.get("Items").value_array):
-            print("...Item #{}".format(idx + 1))
-            item_description = item.value_object.get("Description")
-            if item_description:
-                print(
-                    "......Item Description: {} has confidence: {}".format(
-                        item_description.value_string, item_description.confidence
-                    )
-                )
-            item_quantity = item.value_object.get("Quantity")
-            if item_quantity:
-                print(
-                    "......Item Quantity: {} has confidence: {}".format(
-                        item_quantity.value_number, item_quantity.confidence
-                    )
-                )
-            item_price = item.value_object.get("Price")
-            if item_price:
-                print(
-                    "......Individual Item Price: {} has confidence: {}".format(
-                        item_price.value_currency.amount, item_price.confidence
-                    )
-                )
-            item_total_price = item.value_object.get("TotalPrice")
-            if item_total_price:
-                print(
-                    "......Total Item Price: {} has confidence: {}".format(
-                        item_total_price.value_currency.amount, item_total_price.confidence
-                    )
-                )
-    subtotal = receipt.fields.get("Subtotal")
-    if subtotal:
-        print(
-            "Subtotal: {} has confidence: {}".format(
-                subtotal.value_currency.amount, subtotal.confidence
-            )
-        )
-    tax = receipt.fields.get("TotalTax")
-    if tax:
-        print("Tax: {} has confidence: {}".format(tax.value_currency.amount, tax.confidence))
-    tip = receipt.fields.get("Tip")
-    if tip:
-        print("Tip: {} has confidence: {}".format(tip.value_currency.amount, tip.confidence))
-    total = receipt.fields.get("Total")
-    if total:
-        print("Total: {} has confidence: {}".format(total.value_currency.amount, total.confidence))
-    print("--------------------------------------")
+            receipts = poller.result()
+
+            for idx, receipt in enumerate(receipts.documents):
+                st.subheader(f"Recognizing receipt #{idx + 1}")
+                receipt_type = receipt.doc_type
+                if receipt_type:
+                    st.write(f"**Receipt Type:** {receipt_type}")
+
+                merchant_name = receipt.fields.get("MerchantName")
+                if merchant_name:
+                    st.write(f"**Merchant Name:** {merchant_name.value_string} (confidence: {merchant_name.confidence:.2f})")
+
+                transaction_date = receipt.fields.get("TransactionDate")
+                if transaction_date:
+                    st.write(f"**Transaction Date:** {transaction_date.value_date} (confidence: {transaction_date.confidence:.2f})")
+
+                if receipt.fields.get("Items"):
+                    st.write("**Items:**")
+                    for idx, item in enumerate(receipt.fields.get("Items").value_array):
+                        st.write(f"- **Item #{idx + 1}**")
+                        item_description = item.value_object.get("Description")
+                        if item_description:
+                            st.write(f"  - Description: {item_description.value_string} (confidence: {item_description.confidence:.2f})")
+                        item_quantity = item.value_object.get("Quantity")
+                        if item_quantity:
+                            st.write(f"  - Quantity: {item_quantity.value_number} (confidence: {item_quantity.confidence:.2f})")
+                        item_price = item.value_object.get("Price")
+                        if item_price:
+                            st.write(f"  - Price: {item_price.value_currency.amount} (confidence: {item_price.confidence:.2f})")
+                        item_total_price = item.value_object.get("TotalPrice")
+                        if item_total_price:
+                            st.write(f"  - Total Price: {item_total_price.value_currency.amount} (confidence: {item_total_price.confidence:.2f})")
+
+                subtotal = receipt.fields.get("Subtotal")
+                if subtotal:
+                    st.write(f"**Subtotal:** {subtotal.value_currency.amount} (confidence: {subtotal.confidence:.2f})")
+
+                tax = receipt.fields.get("TotalTax")
+                if tax:
+                    st.write(f"**Tax:** {tax.value_currency.amount} (confidence: {tax.confidence:.2f})")
+
+                tip = receipt.fields.get("Tip")
+                if tip:
+                    st.write(f"**Tip:** {tip.value_currency.amount} (confidence: {tip.confidence:.2f})")
+
+                total = receipt.fields.get("Total")
+                if total:
+                    st.write(f"**Total:** {total.value_currency.amount} (confidence: {total.confidence:.2f})")
