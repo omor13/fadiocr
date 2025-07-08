@@ -1,1 +1,2 @@
-
+streamlit
+azure-ai-documentintelligence
